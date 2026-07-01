@@ -2,14 +2,60 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Mi Libreta</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body>
-    <div id="root" style="padding: 20px; font-family: sans-serif;">
-        <h1 style="text-align: center; font-size: 24px;">¡Tu Libreta está lista!</h1>
-        <p style="text-align: center;">Si puedes leer esto, tu archivo está correctamente configurado.</p>
-    </div>
+    <div id="root"></div>
+    <script type="text/babel">
+        function Libreta() {
+            const [gastos, setGastos] = React.useState([]);
+
+            // Cargar datos al abrir
+            React.useEffect(() => {
+                const guardados = localStorage.getItem('misGastos');
+                if (guardados) setGastos(JSON.parse(guardados));
+            }, []);
+
+            // Guardar datos al cambiar
+            const agregarGasto = (nombre, monto) => {
+                const nuevo = [...gastos, { nombre, monto, id: Date.now() }];
+                setGastos(nuevo);
+                localStorage.setItem('misGastos', JSON.stringify(nuevo));
+            };
+
+            const borrarGasto = (id) => {
+                const nuevo = gastos.filter(g => g.id !== id);
+                setGastos(nuevo);
+                localStorage.setItem('misGastos', JSON.stringify(nuevo));
+            };
+
+            return (
+                <div className="p-4 max-w-sm mx-auto">
+                    <h1 className="text-2xl font-bold mb-4">Mi Libreta</h1>
+                    <button 
+                        className="bg-blue-500 text-white p-2 w-full mb-4 rounded"
+                        onClick={() => agregarGasto(prompt("Nombre del gasto:"), prompt("Monto:"))}
+                    >
+                        Agregar Gasto
+                    </button>
+                    <ul>
+                        {gastos.map(g => (
+                            <li key={g.id} className="flex justify-between p-2 border-b">
+                                {g.nombre}: ${g.monto}
+                                <button onClick={() => borrarGasto(g.id)} className="text-red-500">Borrar</button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<Libreta />);
+    </script>
 </body>
 </html>
