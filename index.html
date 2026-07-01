@@ -11,21 +11,25 @@
 </head>
 <body>
     <div id="root"></div>
+
     <script type="text/babel">
         function Libreta() {
             const [gastos, setGastos] = React.useState([]);
 
-            // Cargar datos al abrir
             React.useEffect(() => {
                 const guardados = localStorage.getItem('misGastos');
                 if (guardados) setGastos(JSON.parse(guardados));
             }, []);
 
-            // Guardar datos al cambiar
-            const agregarGasto = (nombre, monto) => {
-                const nuevo = [...gastos, { nombre, monto, id: Date.now() }];
-                setGastos(nuevo);
-                localStorage.setItem('misGastos', JSON.stringify(nuevo));
+            const agregarGasto = () => {
+                const nombre = prompt("¿Qué gastaste?");
+                const monto = prompt("¿Cuánto costó?");
+                const cat = prompt("Categoría (Comida, Transporte, Ocio, Salud, Compras, Otros):");
+                if (nombre && monto) {
+                    const nuevo = [...gastos, { id: Date.now(), nombre, monto, cat: cat || "Otros" }];
+                    setGastos(nuevo);
+                    localStorage.setItem('misGastos', JSON.stringify(nuevo));
+                }
             };
 
             const borrarGasto = (id) => {
@@ -34,23 +38,32 @@
                 localStorage.setItem('misGastos', JSON.stringify(nuevo));
             };
 
+            const total = gastos.reduce((acc, g) => acc + Number(g.monto), 0);
+
             return (
-                <div className="p-4 max-w-sm mx-auto">
-                    <h1 className="text-2xl font-bold mb-4">Mi Libreta</h1>
-                    <button 
-                        className="bg-blue-500 text-white p-2 w-full mb-4 rounded"
-                        onClick={() => agregarGasto(prompt("Nombre del gasto:"), prompt("Monto:"))}
-                    >
-                        Agregar Gasto
+                <div className="p-4 max-w-sm mx-auto bg-gray-50 min-h-screen">
+                    <h1 className="text-2xl font-bold mb-4 text-center">Mi Libreta</h1>
+                    <div className="bg-white p-4 rounded-lg shadow mb-4">
+                        <p className="text-gray-500">Total gastado</p>
+                        <p className="text-3xl font-bold">${total}</p>
+                    </div>
+                    <button onClick={agregarGasto} className="bg-green-600 text-white w-full py-3 rounded-lg font-bold mb-4">
+                        + Agregar Gasto
                     </button>
-                    <ul>
+                    <div className="space-y-2">
                         {gastos.map(g => (
-                            <li key={g.id} className="flex justify-between p-2 border-b">
-                                {g.nombre}: ${g.monto}
-                                <button onClick={() => borrarGasto(g.id)} className="text-red-500">Borrar</button>
-                            </li>
+                            <div key={g.id} className="bg-white p-3 rounded-lg flex justify-between items-center shadow-sm">
+                                <div>
+                                    <p className="font-medium">{g.nombre}</p>
+                                    <p className="text-xs text-gray-400">{g.cat}</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold">${g.monto}</span>
+                                    <button onClick={() => borrarGasto(g.id)} className="text-red-400">✕</button>
+                                </div>
+                            </div>
                         ))}
-                    </ul>
+                    </div>
                 </div>
             );
         }
