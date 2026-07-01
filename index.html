@@ -4,71 +4,837 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Mi Libreta</title>
+    <!-- Cargamos las librerías necesarias -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
-        function Libreta() {
-            const [gastos, setGastos] = React.useState([]);
+    <script type="text/babel">Import React, { useState, useEffect, useMemo } from "react";
+import {
+  Plus, X, Utensils, Bus, Film, HeartPulse, ShoppingBag, Receipt,
+  MoreHorizontal, Home, Gift, Book, Dumbbell, Plane, Coffee, PawPrint,
+  Wrench, GraduationCap, Smartphone, Trash2, Pencil, ChevronLeft, ChevronRight,
+  Settings, ArrowDownCircle, ArrowUpCircle, Check, Calculator, Delete
+} from "lucide-react";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
 
-            React.useEffect(() => {
-                const guardados = localStorage.getItem('misGastos');
-                if (guardados) setGastos(JSON.parse(guardados));
-            }, []);
+const ICONS = {
+  utensils: Utensils, bus: Bus, film: Film, heart: HeartPulse, bag: ShoppingBag,
+  receipt: Receipt, home: Home, gift: Gift, book: Book, dumbbell: Dumbbell,
+  plane: Plane, coffee: Coffee, paw: PawPrint, wrench: Wrench, grad: GraduationCap,
+  phone: Smartphone, other: MoreHorizontal,
+};
+const ICON_IDS = Object.keys(ICONS);
 
-            const agregarGasto = () => {
-                const nombre = prompt("¿Qué gastaste?");
-                const monto = prompt("¿Cuánto costó?");
-                const cat = prompt("Categoría (Comida, Transporte, Ocio, Salud, Compras, Otros):");
-                if (nombre && monto) {
-                    const nuevo = [...gastos, { id: Date.now(), nombre, monto, cat: cat || "Otros" }];
-                    setGastos(nuevo);
-                    localStorage.setItem('misGastos', JSON.stringify(nuevo));
-                }
-            };
+const COLORS = ["#C9A227", "#7A9B76", "#E2725B", "#8B7EC8", "#5B9BD5", "#D08C60", "#4FA69A", "#C97B92", "#A3A24A", "#9AA0A6"];
 
-            const borrarGasto = (id) => {
-                const nuevo = gastos.filter(g => g.id !== id);
-                setGastos(nuevo);
-                localStorage.setItem('misGastos', JSON.stringify(nuevo));
-            };
+const DEFAULT_CATEGORIES = [
+  { id: "comida", label: "Comida", icon: "utensils", color: "#C9A227" },
+  { id: "transporte", label: "Transporte", icon: "bus", color: "#7A9B76" },
+  { id: "ocio", label: "Ocio", icon: "film", color: "#E2725B" },
+  { id: "salud", label: "Salud", icon: "heart", color: "#8B7EC8" },
+  { id: "compras", label: "Compras", icon: "bag", color: "#5B9BD5" },
+  { id: "servicios", label: "Servicios", icon: "receipt", color: "#D08C60" },
+  { id: "otros", label: "Otros", icon: "other", color: "#9AA0A6" },
+];
 
-            const total = gastos.reduce((acc, g) => acc + Number(g.monto), 0);
+const FALLBACK_CAT = { id: "otros", label: "Sin categoría", icon: "other", color: "#9AA0A6" };
 
-            return (
-                <div className="p-4 max-w-sm mx-auto bg-gray-50 min-h-screen">
-                    <h1 className="text-2xl font-bold mb-4 text-center">Mi Libreta</h1>
-                    <div className="bg-white p-4 rounded-lg shadow mb-4">
-                        <p className="text-gray-500">Total gastado</p>
-                        <p className="text-3xl font-bold">${total}</p>
-                    </div>
-                    <button onClick={agregarGasto} className="bg-green-600 text-white w-full py-3 rounded-lg font-bold mb-4">
-                        + Agregar Gasto
-                    </button>
-                    <div className="space-y-2">
-                        {gastos.map(g => (
-                            <div key={g.id} className="bg-white p-3 rounded-lg flex justify-between items-center shadow-sm">
-                                <div>
-                                    <p className="font-medium">{g.nombre}</p>
-                                    <p className="text-xs text-gray-400">{g.cat}</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="font-bold">${g.monto}</span>
-                                    <button onClick={() => borrarGasto(g.id)} className="text-red-400">✕</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+const MONTH_ABBR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function fmt(n) {
+  return new Intl.NumberFormat("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+}
+function monthLabel(d) {
+  return d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+}
+function todayISO() {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+}
+function daysInMonth(d) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+function uid() {
+  return Date.now() + Math.floor(Math.random() * 1000);
+}
+
+// Safe evaluator for simple expense math like "1500+2300+800" (no eval/Function used)
+function calcEval(expr) {
+  const clean = String(expr).replace(/,/g, ".").replace(/[^0-9.+\-*/() ]/g, "");
+  if (!clean.trim()) return 0;
+  let i = 0;
+  function skipSpace() { while (clean[i] === " ") i++; }
+  function parseFactor() {
+    skipSpace();
+    let v;
+    if (clean[i] === "(") {
+      i++;
+      v = parseExpr();
+      skipSpace();
+      if (clean[i] === ")") i++;
+    } else {
+      const start = i;
+      while (i < clean.length && /[0-9.]/.test(clean[i])) i++;
+      v = parseFloat(clean.slice(start, i));
+      if (isNaN(v)) v = 0;
+    }
+    skipSpace();
+    return v;
+  }
+  function parseTerm() {
+    let v = parseFactor();
+    while (clean[i] === "*" || clean[i] === "/") {
+      const op = clean[i]; i++;
+      const rhs = parseFactor();
+      v = op === "*" ? v * rhs : (rhs !== 0 ? v / rhs : v);
+    }
+    return v;
+  }
+  function parseExpr() {
+    let v = parseTerm();
+    while (clean[i] === "+" || clean[i] === "-") {
+      const op = clean[i]; i++;
+      const rhs = parseTerm();
+      v = op === "+" ? v + rhs : v - rhs;
+    }
+    return v;
+  }
+  try {
+    const result = parseExpr();
+    return isFinite(result) ? result : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+function hasOperator(expr) {
+  return /[+\-*/]/.test(String(expr).slice(1));
+}
+
+export default function Libreta() {
+  const [expenses, setExpenses] = useState([]);
+  const [deposits, setDeposits] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [loaded, setLoaded] = useState(false);
+  const [cursor, setCursor] = useState(() => { const d = new Date(); d.setDate(1); return d; });
+
+  const [expForm, setExpForm] = useState(null); // { editingId, amount, name, category, date }
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [depForm, setDepForm] = useState(null); // { editingId, amount, note, date }
+  const [depsManagerOpen, setDepsManagerOpen] = useState(false);
+  const [catManagerOpen, setCatManagerOpen] = useState(false);
+  const [catForm, setCatForm] = useState(null); // { editingId, name, icon, color }
+  const [saving, setSaving] = useState(false);
+  const [chartView, setChartView] = useState("cat"); // 'cat' | 'day' | 'month'
+  const [selectedCat, setSelectedCat] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage.get("expenses");
+        if (r && r.value) setExpenses(JSON.parse(r.value));
+      } catch (e) {}
+      try {
+        const r = await window.storage.get("deposits");
+        if (r && r.value) setDeposits(JSON.parse(r.value));
+      } catch (e) {}
+      try {
+        const r = await window.storage.get("categories");
+        if (r && r.value) setCategories(JSON.parse(r.value));
+      } catch (e) {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  async function persist(key, value, setter) {
+    setter(value);
+    try {
+      await window.storage.set(key, JSON.stringify(value));
+    } catch (e) {
+      console.error("No se pudo guardar", e);
+    }
+  }
+
+  const catById = useMemo(() => Object.fromEntries(categories.map(c => [c.id, c])), [categories]);
+  function getCat(id) { return catById[id] || FALLBACK_CAT; }
+
+  const balance = useMemo(
+    () => deposits.reduce((s, d) => s + d.amount, 0) - expenses.reduce((s, e) => s + e.amount, 0),
+    [deposits, expenses]
+  );
+
+  const monthKey = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+  const monthExpenses = useMemo(
+    () => expenses.filter(e => e.date.slice(0, 7) === monthKey).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id),
+    [expenses, monthKey]
+  );
+  const monthTotal = monthExpenses.reduce((s, e) => s + e.amount, 0);
+
+  const byCategory = useMemo(() => {
+    const map = {};
+    for (const e of monthExpenses) map[e.category] = (map[e.category] || 0) + e.amount;
+    return Object.entries(map)
+      .map(([id, total]) => ({ ...getCat(id), total, pct: monthTotal > 0 ? (total / monthTotal) * 100 : 0 }))
+      .sort((a, b) => b.total - a.total);
+  }, [monthExpenses, monthTotal, categories]);
+
+  const dailyData = useMemo(() => {
+    const nDays = daysInMonth(cursor);
+    const arr = Array.from({ length: nDays }, (_, i) => ({ day: String(i + 1), total: 0 }));
+    for (const e of monthExpenses) {
+      const d = parseInt(e.date.slice(8, 10), 10);
+      if (d >= 1 && d <= nDays) arr[d - 1].total += e.amount;
+    }
+    return arr;
+  }, [monthExpenses, cursor]);
+
+  const monthlyComparison = useMemo(() => {
+    const arr = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const total = expenses.filter(e => e.date.slice(0, 7) === key).reduce((s, e) => s + e.amount, 0);
+      arr.push({ label: MONTH_ABBR[d.getMonth()], total, isCurrent: key === monthKey });
+    }
+    return arr;
+  }, [expenses, cursor, monthKey]);
+
+  const grouped = useMemo(() => {
+    const g = {};
+    for (const e of monthExpenses) (g[e.date] = g[e.date] || []).push(e);
+    return Object.entries(g).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [monthExpenses]);
+
+  function changeMonth(delta) {
+    const d = new Date(cursor);
+    d.setMonth(d.getMonth() + delta);
+    setCursor(d);
+    setSelectedCat(null);
+  }
+
+  // ---- Expense form ----
+  function openNewExpense() {
+    setCalcOpen(false);
+    setExpForm({ editingId: null, amount: "", name: "", category: categories[0]?.id || "otros", date: todayISO() });
+  }
+  function openEditExpense(e) {
+    setCalcOpen(false);
+    setExpForm({ editingId: e.id, amount: String(e.amount), name: e.note, category: e.category, date: e.date });
+  }
+  async function saveExpense() {
+    const val = calcEval(expForm.amount);
+    if (!val || val <= 0) return;
+    setSaving(true);
+    let next;
+    if (expForm.editingId) {
+      next = expenses.map(e => e.id === expForm.editingId
+        ? { ...e, amount: val, category: expForm.category, note: expForm.name.trim(), date: expForm.date }
+        : e);
+    } else {
+      next = [...expenses, { id: uid(), amount: val, category: expForm.category, note: expForm.name.trim(), date: expForm.date }];
+    }
+    await persist("expenses", next, setExpenses);
+    setSaving(false);
+    setExpForm(null);
+  }
+  async function deleteExpense(id) {
+    await persist("expenses", expenses.filter(e => e.id !== id), setExpenses);
+    setExpForm(null);
+  }
+  function calcPress(key) {
+    setExpForm(f => {
+      let amount = f.amount || "";
+      if (key === "C") return { ...f, amount: "" };
+      if (key === "back") return { ...f, amount: amount.slice(0, -1) };
+      if (key === "=") return { ...f, amount: calcEval(amount) ? String(Math.round(calcEval(amount) * 100) / 100) : amount };
+      // avoid two operators in a row
+      if (/[+\-*/]/.test(key) && /[+\-*/]$/.test(amount.trim())) {
+        return { ...f, amount: amount.trim().slice(0, -1) + key };
+      }
+      return { ...f, amount: amount + key };
+    });
+  }
+
+  // ---- Deposit form ----
+  function openDeposit() {
+    setDepForm({ editingId: null, amount: "", note: "", date: todayISO() });
+  }
+  function openEditDeposit(d) {
+    setDepForm({ editingId: d.id, amount: String(d.amount), note: d.note || "", date: d.date });
+  }
+  async function saveDeposit() {
+    const val = parseFloat(depForm.amount.replace(",", "."));
+    if (!val || val <= 0) return;
+    setSaving(true);
+    let next;
+    if (depForm.editingId) {
+      next = deposits.map(d => d.id === depForm.editingId
+        ? { ...d, amount: val, note: depForm.note.trim(), date: depForm.date }
+        : d);
+    } else {
+      next = [...deposits, { id: uid(), amount: val, note: depForm.note.trim(), date: depForm.date }];
+    }
+    await persist("deposits", next, setDeposits);
+    setSaving(false);
+    setDepForm(null);
+  }
+  async function deleteDeposit(id) {
+    await persist("deposits", deposits.filter(d => d.id !== id), setDeposits);
+    setDepForm(null);
+  }
+
+  // ---- Category manager ----
+  function openNewCategory() {
+    setCatForm({ editingId: null, name: "", icon: "other", color: COLORS[0] });
+  }
+  function openEditCategory(c) {
+    setCatForm({ editingId: c.id, name: c.label, icon: c.icon, color: c.color });
+  }
+  async function saveCategory() {
+    const name = catForm.name.trim();
+    if (!name) return;
+    let next;
+    if (catForm.editingId) {
+      next = categories.map(c => c.id === catForm.editingId ? { ...c, label: name, icon: catForm.icon, color: catForm.color } : c);
+    } else {
+      next = [...categories, { id: "cat_" + uid(), label: name, icon: catForm.icon, color: catForm.color }];
+    }
+    await persist("categories", next, setCategories);
+    setCatForm(null);
+  }
+  async function deleteCategory(id) {
+    await persist("categories", categories.filter(c => c.id !== id), setCategories);
+  }
+
+  const maxDaily = Math.max(1, ...dailyData.map(d => d.total));
+
+  return (
+    <div style={styles.app}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        button { font-family: inherit; cursor: pointer; }
+        input, select { font-family: inherit; }
+        input::placeholder { color: #B0AA9A; }
+      `}</style>
+
+      {/* Header */}
+      <div style={styles.header}>
+        <div style={styles.headerTop}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={styles.brand}>Libreta</span>
+            <span style={styles.brandDot}>•</span>
+            <span style={styles.brandSub}>gastos</span>
+          </div>
+          <button style={styles.iconBtn} onClick={() => setCatManagerOpen(true)} aria-label="Categorías">
+            <Settings size={17} color="#CFC9B8" />
+          </button>
+        </div>
+
+        <div style={styles.balanceBlock}>
+          <span style={styles.balanceLabel}>tu plata</span>
+          <span style={{ ...styles.balanceAmount, color: balance < 0 ? "#E2725B" : "#F7F3E9" }}>
+            ${fmt(balance)}
+          </span>
+        </div>
+
+        <div style={styles.actionRow}>
+          <button style={styles.actionBtnPrimary} onClick={openNewExpense}>
+            <ArrowUpCircle size={15} color="#1B2E28" /> Gasto
+          </button>
+          <button style={styles.actionBtnSecondary} onClick={openDeposit}>
+            <ArrowDownCircle size={15} color="#F7F3E9" /> Ingreso
+          </button>
+        </div>
+        {deposits.length > 0 && (
+          <button style={styles.viewDepsLink} onClick={() => setDepsManagerOpen(true)}>
+            ver / editar ingresos ({deposits.length})
+          </button>
+        )}
+      </div>
+
+      <div style={styles.perf}>
+        {Array.from({ length: 26 }).map((_, i) => <span key={i} style={styles.perfDot} />)}
+      </div>
+
+      <div style={styles.body}>
+        {/* Month nav */}
+        <div style={styles.monthNav}>
+          <button style={styles.navBtn} onClick={() => changeMonth(-1)} aria-label="Mes anterior">
+            <ChevronLeft size={18} color="#3A3A34" />
+          </button>
+          <span style={styles.monthText}>{monthLabel(cursor)}</span>
+          <button style={styles.navBtn} onClick={() => changeMonth(1)} aria-label="Mes siguiente">
+            <ChevronRight size={18} color="#3A3A34" />
+          </button>
+        </div>
+        <div style={styles.monthTotalRow}>
+          <span style={styles.sectionLabel}>gastado en el mes</span>
+          <span style={styles.monthTotalAmount}>${fmt(monthTotal)}</span>
+        </div>
+
+        {/* Charts */}
+        <div style={styles.section}>
+          <div style={styles.tabRow}>
+            <button style={styles.tabBtn(chartView === "cat")} onClick={() => { setChartView("cat"); }}>Categoría</button>
+            <button style={styles.tabBtn(chartView === "day")} onClick={() => { setChartView("day"); setSelectedCat(null); }}>Por día</button>
+            <button style={styles.tabBtn(chartView === "month")} onClick={() => { setChartView("month"); setSelectedCat(null); }}>Meses</button>
+          </div>
+
+          {chartView === "cat" && (
+            byCategory.length > 0 ? (
+              <div style={styles.chartRow}>
+                <div style={styles.chartWrap}>
+                  <PieChart width={128} height={128}>
+                    <Pie data={byCategory} dataKey="total" nameKey="label" cx="50%" cy="50%"
+                      innerRadius={40} outerRadius={62} paddingAngle={byCategory.length > 1 ? 2 : 0} stroke="none">
+                      {byCategory.map(c => (
+                        <Cell key={c.id} fill={c.color}
+                          opacity={selectedCat && selectedCat.id !== c.id ? 0.35 : 1}
+                          onClick={() => setSelectedCat(selectedCat && selectedCat.id === c.id ? null : c)} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                  <div style={styles.chartCenter}>
+                    {selectedCat ? (
+                      <>
+                        <span style={styles.chartCenterLabel}>{selectedCat.pct.toFixed(0)}% · {selectedCat.label}</span>
+                        <span style={styles.chartCenterAmount}>${fmt(selectedCat.total)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={styles.chartCenterLabel}>total</span>
+                        <span style={styles.chartCenterAmount}>${fmt(monthTotal)}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-            );
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {byCategory.map(c => {
+                    const Icon = ICONS[c.icon] || MoreHorizontal;
+                    const active = selectedCat && selectedCat.id === c.id;
+                    return (
+                      <button key={c.id} style={styles.legendRowBtn(active)}
+                        onClick={() => setSelectedCat(active ? null : c)}>
+                        <div style={styles.catIconWrap(c.color)}><Icon size={13} color={c.color} /></div>
+                        <span style={styles.catName}>{c.label}</span>
+                        <span style={styles.legendPct}>{c.pct.toFixed(0)}%</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : <p style={styles.emptyText}>Todavía no hay gastos este mes.</p>
+          )}
+
+          {chartView === "day" && (
+            monthTotal > 0 ? (
+              <div style={{ marginTop: 8 }}>
+                <ResponsiveContainer width="100%" height={130}>
+                  <BarChart data={dailyData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="day" tick={{ fontSize: 8.5, fill: "#9AA0A6" }} axisLine={false} tickLine={false}
+                      interval={dailyData.length > 20 ? 3 : 1} />
+                    <YAxis hide domain={[0, maxDaily]} />
+                    <Bar dataKey="total" radius={[3, 3, 0, 0]} fill="#7A9B76" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : <p style={styles.emptyText}>Todavía no hay gastos este mes.</p>
+          )}
+
+          {chartView === "month" && (
+            <div style={{ marginTop: 8 }}>
+              <ResponsiveContainer width="100%" height={130}>
+                <BarChart data={monthlyComparison} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#9AA0A6" }} axisLine={false} tickLine={false} />
+                  <YAxis hide />
+                  <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                    {monthlyComparison.map((d, i) => (
+                      <Cell key={i} fill={d.isCurrent ? "#C9A227" : "#D9D2C0"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Movements */}
+        <div style={styles.section}>
+          <span style={styles.sectionLabel}>movimientos</span>
+          {!loaded ? (
+            <p style={styles.emptyText}>Cargando…</p>
+          ) : grouped.length === 0 ? (
+            <div style={styles.empty}>
+              <p style={styles.emptyText}>Todavía no anotaste nada este mes.</p>
+              <p style={styles.emptySub}>Tocá "Gasto" arriba para registrar el primero.</p>
+            </div>
+          ) : (
+            grouped.map(([d, items]) => {
+              const dayTotal = items.reduce((s, e) => s + e.amount, 0);
+              return (
+              <div key={d} style={{ marginTop: 14 }}>
+                <div style={styles.dateLabelRow}>
+                  <span style={styles.dateLabel}>
+                    {new Date(d + "T00:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" })}
+                  </span>
+                  <span style={styles.dateTotalLabel}>${fmt(dayTotal)}</span>
+                </div>
+                {items.map(e => {
+                  const cat = getCat(e.category);
+                  const Icon = ICONS[cat.icon] || MoreHorizontal;
+                  return (
+                    <button key={e.id} style={styles.entryRow} onClick={() => openEditExpense(e)}>
+                      <div style={styles.catIconWrap(cat.color)}><Icon size={14} color={cat.color} /></div>
+                      <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                        <div style={styles.entryTitle}>{e.note || cat.label}</div>
+                        <div style={styles.entrySub}>{cat.label}</div>
+                      </div>
+                      <span style={styles.entryAmount}>${fmt(e.amount)}</span>
+                      <Pencil size={13} color="#C7C1B0" style={{ marginLeft: 4, flexShrink: 0 }} />
+                    </button>
+                  );
+                })}
+              </div>
+              );
+            })
+          )}
+        </div>
+        <div style={{ height: 30 }} />
+      </div>
+
+      {/* Expense sheet */}
+      {expForm && (
+        <div style={styles.sheetOverlay} onClick={() => setExpForm(null)}>
+          <div style={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div style={styles.sheetHandle} />
+            <div style={styles.sheetHeader}>
+              <span style={styles.sheetTitle}>{expForm.editingId ? "Editar gasto" : "Nuevo gasto"}</span>
+              <button style={styles.closeBtn} onClick={() => setExpForm(null)} aria-label="Cerrar"><X size={18} color="#3A3A34" /></button>
+            </div>
+
+            <label style={styles.fieldLabel}>Monto</label>
+            <div style={styles.amountInputWrap}>
+              <span style={styles.amountPrefix}>$</span>
+              <input style={styles.amountInput} type="text" inputMode="decimal" placeholder="0" autoFocus={!expForm.editingId}
+                value={expForm.amount}
+                onChange={e => setExpForm({ ...expForm, amount: e.target.value.replace(/[^0-9.,+\-*/ ]/g, "") })} />
+              <button type="button" style={styles.calcToggle(calcOpen)} onClick={() => setCalcOpen(o => !o)} aria-label="Calculadora">
+                <Calculator size={17} color={calcOpen ? "#F7F3E9" : "#9AA0A6"} />
+              </button>
+            </div>
+            {hasOperator(expForm.amount) && (
+              <div style={styles.calcPreview}>= ${fmt(calcEval(expForm.amount))}</div>
+            )}
+            {calcOpen && (
+              <div style={styles.calcPad}>
+                {["7", "8", "9", "/"].map(k => <button type="button" key={k} style={styles.calcKey(k)} onClick={() => calcPress(k)}>{k === "/" ? "÷" : k}</button>)}
+                {["4", "5", "6", "*"].map(k => <button type="button" key={k} style={styles.calcKey(k)} onClick={() => calcPress(k)}>{k === "*" ? "×" : k}</button>)}
+                {["1", "2", "3", "-"].map(k => <button type="button" key={k} style={styles.calcKey(k)} onClick={() => calcPress(k)}>{k === "-" ? "−" : k}</button>)}
+                <button type="button" style={styles.calcKey("C")} onClick={() => calcPress("C")}>C</button>
+                <button type="button" style={styles.calcKey("0")} onClick={() => calcPress("0")}>0</button>
+                <button type="button" style={styles.calcKey(".")} onClick={() => calcPress(".")}>.</button>
+                <button type="button" style={styles.calcKey("+")} onClick={() => calcPress("+")}>+</button>
+                <button type="button" style={styles.calcKeyWide} onClick={() => calcPress("back")}><Delete size={15} /></button>
+                <button type="button" style={styles.calcKeyEquals} onClick={() => calcPress("=")}>=</button>
+              </div>
+            )}
+
+            <label style={styles.fieldLabel}>¿En qué gastaste?</label>
+            <input style={styles.textInput} type="text" placeholder="ej. almuerzo con Juan"
+              value={expForm.name} onChange={e => setExpForm({ ...expForm, name: e.target.value })} />
+
+            <label style={styles.fieldLabel}>Categoría</label>
+            <div style={styles.catGrid}>
+              {categories.map(c => {
+                const Icon = ICONS[c.icon] || MoreHorizontal;
+                const active = expForm.category === c.id;
+                return (
+                  <button key={c.id} type="button" onClick={() => setExpForm({ ...expForm, category: c.id })}
+                    style={styles.catChip(active, c.color)}>
+                    <Icon size={14} color={active ? "#F7F3E9" : c.color} /> {c.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <label style={styles.fieldLabel}>Fecha</label>
+            <input style={styles.textInput} type="date" value={expForm.date} max={todayISO()}
+              onChange={e => setExpForm({ ...expForm, date: e.target.value })} />
+
+            <button style={{ ...styles.saveBtn, opacity: expForm.amount ? 1 : 0.5 }} onClick={saveExpense} disabled={!expForm.amount || saving}>
+              {saving ? "Guardando…" : expForm.editingId ? "Guardar cambios" : "Guardar gasto"}
+            </button>
+            {expForm.editingId && (
+              <button style={styles.deleteLinkBtn} onClick={() => deleteExpense(expForm.editingId)}>
+                <Trash2 size={14} /> Eliminar gasto
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Deposit sheet */}
+      {depForm && (
+        <div style={styles.sheetOverlay} onClick={() => setDepForm(null)}>
+          <div style={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div style={styles.sheetHandle} />
+            <div style={styles.sheetHeader}>
+              <span style={styles.sheetTitle}>{depForm.editingId ? "Editar ingreso" : "Agregar ingreso"}</span>
+              <button style={styles.closeBtn} onClick={() => setDepForm(null)} aria-label="Cerrar"><X size={18} color="#3A3A34" /></button>
+            </div>
+            <label style={styles.fieldLabel}>Monto</label>
+            <div style={styles.amountInputWrap}>
+              <span style={styles.amountPrefix}>$</span>
+              <input style={styles.amountInput} type="text" inputMode="decimal" placeholder="0" autoFocus
+                value={depForm.amount} onChange={e => setDepForm({ ...depForm, amount: e.target.value.replace(/[^0-9.,]/g, "") })} />
+            </div>
+            <label style={styles.fieldLabel}>Nota (opcional)</label>
+            <input style={styles.textInput} type="text" placeholder="ej. sueldo, transferencia"
+              value={depForm.note} onChange={e => setDepForm({ ...depForm, note: e.target.value })} />
+            <label style={styles.fieldLabel}>Fecha</label>
+            <input style={styles.textInput} type="date" value={depForm.date} max={todayISO()}
+              onChange={e => setDepForm({ ...depForm, date: e.target.value })} />
+            <button style={{ ...styles.saveBtn, opacity: depForm.amount ? 1 : 0.5 }} onClick={saveDeposit} disabled={!depForm.amount || saving}>
+              {saving ? "Guardando…" : depForm.editingId ? "Guardar cambios" : "Guardar ingreso"}
+            </button>
+            {depForm.editingId && (
+              <button style={styles.deleteLinkBtn} onClick={() => deleteDeposit(depForm.editingId)}>
+                <Trash2 size={14} /> Eliminar ingreso
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Deposit history sheet */}
+      {depsManagerOpen && !depForm && (
+        <div style={styles.sheetOverlay} onClick={() => setDepsManagerOpen(false)}>
+          <div style={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div style={styles.sheetHandle} />
+            <div style={styles.sheetHeader}>
+              <span style={styles.sheetTitle}>Ingresos</span>
+              <button style={styles.closeBtn} onClick={() => setDepsManagerOpen(false)} aria-label="Cerrar"><X size={18} color="#3A3A34" /></button>
+            </div>
+            {[...deposits].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).map(d => (
+              <button key={d.id} style={styles.entryRow} onClick={() => { setDepsManagerOpen(false); openEditDeposit(d); }}>
+                <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                  <div style={styles.entryTitle}>{d.note || "Ingreso"}</div>
+                  <div style={styles.entrySub}>
+                    {new Date(d.date + "T00:00:00").toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "numeric" })}
+                  </div>
+                </div>
+                <span style={{ ...styles.entryAmount, color: "#7A9B76" }}>${fmt(d.amount)}</span>
+                <Pencil size={13} color="#C7C1B0" style={{ marginLeft: 4, flexShrink: 0 }} />
+              </button>
+            ))}
+            <button style={styles.addCatBtn} onClick={() => { setDepsManagerOpen(false); openDeposit(); }}>
+              <Plus size={15} /> Nuevo ingreso
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Category manager sheet */}
+      {catManagerOpen && !catForm && (
+        <div style={styles.sheetOverlay} onClick={() => setCatManagerOpen(false)}>
+          <div style={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div style={styles.sheetHandle} />
+            <div style={styles.sheetHeader}>
+              <span style={styles.sheetTitle}>Categorías</span>
+              <button style={styles.closeBtn} onClick={() => setCatManagerOpen(false)} aria-label="Cerrar"><X size={18} color="#3A3A34" /></button>
+            </div>
+            {categories.map(c => {
+              const Icon = ICONS[c.icon] || MoreHorizontal;
+              return (
+                <div key={c.id} style={styles.catManageRow}>
+                  <div style={styles.catIconWrap(c.color)}><Icon size={14} color={c.color} /></div>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500 }}>{c.label}</span>
+                  <button style={styles.smallIconBtn} onClick={() => openEditCategory(c)} aria-label="Editar"><Pencil size={14} color="#6B655A" /></button>
+                  <button style={styles.smallIconBtn} onClick={() => deleteCategory(c.id)} aria-label="Eliminar"><Trash2 size={14} color="#B5AFA0" /></button>
+                </div>
+              );
+            })}
+            <button style={styles.addCatBtn} onClick={openNewCategory}>
+              <Plus size={15} /> Nueva categoría
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Category add/edit sheet */}
+      {catForm && (
+        <div style={styles.sheetOverlay} onClick={() => setCatForm(null)}>
+          <div style={styles.sheet} onClick={e => e.stopPropagation()}>
+            <div style={styles.sheetHandle} />
+            <div style={styles.sheetHeader}>
+              <span style={styles.sheetTitle}>{catForm.editingId ? "Editar categoría" : "Nueva categoría"}</span>
+              <button style={styles.closeBtn} onClick={() => setCatForm(null)} aria-label="Cerrar"><X size={18} color="#3A3A34" /></button>
+            </div>
+            <label style={styles.fieldLabel}>Nombre</label>
+            <input style={styles.textInput} type="text" placeholder="ej. Mascotas" autoFocus
+              value={catForm.name} onChange={e => setCatForm({ ...catForm, name: e.target.value })} />
+
+            <label style={styles.fieldLabel}>Ícono</label>
+            <div style={styles.iconGrid}>
+              {ICON_IDS.map(id => {
+                const Icon = ICONS[id];
+                const active = catForm.icon === id;
+                return (
+                  <button key={id} type="button" onClick={() => setCatForm({ ...catForm, icon: id })}
+                    style={styles.iconOption(active, catForm.color)}>
+                    <Icon size={16} color={active ? "#F7F3E9" : "#6B655A"} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <label style={styles.fieldLabel}>Color</label>
+            <div style={styles.colorGrid}>
+              {COLORS.map(col => (
+                <button key={col} type="button" onClick={() => setCatForm({ ...catForm, color: col })}
+                  style={styles.colorOption(col, catForm.color === col)}>
+                  {catForm.color === col && <Check size={14} color="#fff" />}
+                </button>
+              ))}
+            </div>
+
+            <button style={{ ...styles.saveBtn, opacity: catForm.name.trim() ? 1 : 0.5 }} onClick={saveCategory} disabled={!catForm.name.trim()}>
+              Guardar categoría
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const styles = {
+  app: { minHeight: "100vh", background: "#F7F3E9", fontFamily: "'Inter', sans-serif", color: "#3A3A34", maxWidth: 480, margin: "0 auto", position: "relative" },
+  header: { background: "#1B2E28", padding: "24px 20px 18px" },
+  headerTop: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  brand: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22, color: "#F7F3E9", letterSpacing: 0.2 },
+  brandDot: { color: "#C9A227" },
+  brandSub: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, color: "#9CB3A9", textTransform: "lowercase" },
+  iconBtn: { background: "#24382F", border: "1px solid #34493F", borderRadius: 9, width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center" },
+  balanceBlock: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4, marginBottom: 16 },
+  balanceLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#7A9B76", textTransform: "uppercase", letterSpacing: 1.5 },
+  balanceAmount: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 38, fontWeight: 600, letterSpacing: -0.5 },
+  actionRow: { display: "flex", gap: 10 },
+  viewDepsLink: { display: "block", width: "100%", textAlign: "center", background: "none", border: "none", color: "#9CB3A9", fontSize: 11.5, marginTop: 10, textDecoration: "underline", textUnderlineOffset: 3 },
+  actionBtnPrimary: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#C9A227", border: "none", borderRadius: 10, padding: "11px 0", fontSize: 13.5, fontWeight: 600, color: "#1B2E28" },
+  actionBtnSecondary: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: "1.5px solid #34493F", borderRadius: 10, padding: "11px 0", fontSize: 13.5, fontWeight: 600, color: "#F7F3E9" },
+  perf: { display: "flex", justifyContent: "space-between", padding: "0 10px", background: "#1B2E28", transform: "translateY(-1px)" },
+  perfDot: { width: 8, height: 8, borderRadius: "50%", background: "#F7F3E9", marginBottom: -4 },
+  body: { padding: "18px 20px 0" },
+  monthNav: { display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 4 },
+  navBtn: { background: "none", border: "none", padding: 4, display: "flex" },
+  monthText: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, textTransform: "capitalize", minWidth: 140, textAlign: "center" },
+  monthTotalRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #E8E2D3" },
+  monthTotalAmount: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 16, fontWeight: 600 },
+  section: { marginBottom: 22 },
+  sectionLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#9AA0A6", textTransform: "uppercase", letterSpacing: 1.5 },
+  tabRow: { display: "flex", gap: 6, marginBottom: 14 },
+  tabBtn: (active) => ({
+    flex: 1, padding: "8px 0", borderRadius: 9, fontSize: 12, fontWeight: 600,
+    border: active ? "none" : "1px solid #E8E2D3", background: active ? "#1B2E28" : "#fff",
+    color: active ? "#F7F3E9" : "#6B655A",
+  }),
+  chartRow: { display: "flex", alignItems: "center", gap: 14, marginTop: 10 },
+  chartWrap: { position: "relative", width: 128, height: 128, flexShrink: 0 },
+  chartCenter: { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none" },
+  chartCenterLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: "#9AA0A6", textTransform: "uppercase", letterSpacing: 1 },
+  chartCenterAmount: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, fontWeight: 600 },
+  legendRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 },
+  legendRowBtn: (active) => ({
+    display: "flex", alignItems: "center", gap: 8, marginBottom: 8, width: "100%",
+    background: active ? "#EDE7D8" : "none", border: "none", borderRadius: 8,
+    padding: active ? "4px 6px" : "4px 0", textAlign: "left",
+  }),
+  legendPct: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, fontWeight: 600, marginLeft: "auto" },
+  catIconWrap: (color) => ({ width: 28, height: 28, borderRadius: 8, background: `${color}1F`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }),
+  catName: { fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  empty: { padding: "16px 0 8px" },
+  emptyText: { fontSize: 14, color: "#6B655A", margin: "10px 0 2px" },
+  emptySub: { fontSize: 12.5, color: "#9AA0A6", margin: 0 },
+  dateLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "#9AA0A6", textTransform: "uppercase", letterSpacing: 1 },
+  dateLabelRow: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 },
+  dateTotalLabel: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, fontWeight: 600, color: "#6B655A" },
+  entryRow: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #E8E2D3", width: "100%", background: "none", border: "none", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "#E8E2D3", textAlign: "left" },
+  entryTitle: { fontSize: 13.5, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  entrySub: { fontSize: 11.5, color: "#9AA0A6" },
+  entryAmount: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 14, fontWeight: 600, flexShrink: 0 },
+  sheetOverlay: { position: "fixed", inset: 0, background: "rgba(27,46,40,0.45)", display: "flex", alignItems: "flex-end", zIndex: 10 },
+  sheet: { background: "#F7F3E9", width: "100%", maxWidth: 480, margin: "0 auto", borderRadius: "18px 18px 0 0", padding: "10px 20px 26px", maxHeight: "88vh", overflowY: "auto" },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, background: "#D9D2C0", margin: "0 auto 14px" },
+  sheetHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  sheetTitle: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600 },
+  closeBtn: { background: "#EDE7D8", border: "none", borderRadius: "50%", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center" },
+  fieldLabel: { fontSize: 11.5, fontWeight: 600, color: "#6B655A", textTransform: "uppercase", letterSpacing: 0.8, display: "block", marginBottom: 6, marginTop: 16 },
+  amountInputWrap: { display: "flex", alignItems: "center", background: "#fff", border: "1.5px solid #E8E2D3", borderRadius: 12, padding: "10px 14px" },
+  amountPrefix: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, color: "#9AA0A6", marginRight: 4 },
+  amountInput: { border: "none", outline: "none", background: "transparent", fontFamily: "'IBM Plex Mono', monospace", fontSize: 22, fontWeight: 600, width: "100%", color: "#1B2E28" },
+  calcToggle: (active) => ({
+    flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: "none",
+    background: active ? "#C9A227" : "#F2EEE2", display: "flex", alignItems: "center", justifyContent: "center",
+  }),
+  calcPreview: { fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: "#7A9B76", fontWeight: 600, marginTop: 6, textAlign: "right" },
+  calcPad: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 7, marginTop: 10 },
+  calcKey: (k) => ({
+    aspectRatio: "1.3", borderRadius: 10, border: "none", fontSize: 16, fontWeight: 600,
+    background: /[+\-*/=]/.test(k) ? "#EDE7D8" : "#fff",
+    color: k === "C" ? "#E2725B" : "#1B2E28",
+    boxShadow: "0 1px 0 rgba(0,0,0,0.05)",
+  }),
+  calcKeyWide: { aspectRatio: "1.3", borderRadius: 10, border: "none", background: "#EDE7D8", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B655A" },
+  calcKeyEquals: { aspectRatio: "1.3", borderRadius: 10, border: "none", background: "#1B2E28", color: "#F7F3E9", fontSize: 16, fontWeight: 700 },
+  catGrid: { display: "flex", flexWrap: "wrap", gap: 8 },
+  catChip: (active, color) => ({ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 20, border: `1.5px solid ${active ? color : "#E8E2D3"}`, background: active ? color : "#fff", color: active ? "#F7F3E9" : "#3A3A34", fontSize: 12.5, fontWeight: 500 }),
+  textInput: { width: "100%", border: "1.5px solid #E8E2D3", borderRadius: 12, padding: "10px 14px", fontSize: 14, outline: "none", background: "#fff", color: "#1B2E28" },
+  saveBtn: { width: "100%", marginTop: 22, background: "#1B2E28", color: "#F7F3E9", border: "none", borderRadius: 12, padding: "14px 0", fontSize: 15, fontWeight: 600 },
+  deleteLinkBtn: { width: "100%", marginTop: 12, background: "none", border: "none", color: "#E2725B", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0" },
+  catManageRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #E8E2D3" },
+  smallIconBtn: { background: "#EDE7D8", border: "none", borderRadius: 8, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center" },
+  addCatBtn: { width: "100%", marginTop: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "#EDE7D8", border: "1.5px dashed #D9D2C0", borderRadius: 12, padding: "12px 0", fontSize: 13.5, fontWeight: 600, color: "#3A3A34" },
+  iconGrid: { display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 },
+  iconOption: (active, color) => ({ aspectRatio: "1", borderRadius: 10, border: `1.5px solid ${active ? color : "#E8E2D3"}`, background: active ? color : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }),
+  colorGrid: { display: "flex", flexWrap: "wrap", gap: 10 },
+  colorOption: (col, active) => ({ width: 30, height: 30, borderRadius: "50%", background: col, border: active ? "2px solid #1B2E28" : "2px solid transparent", display: "flex", alignItems: "center", justifyContent: "center" }),
+};
+
+        // --- AQUÍ VA TODO TU CÓDIGO ---
+        // He modificado la función useEffect de carga para usar localStorage directamente:
+        
+        // REEMPLAZA TU FUNCIÓN useEffect ORIGINAL POR ESTA:
+        /*
+        useEffect(() => {
+            const e = localStorage.getItem("expenses");
+            if (e) setExpenses(JSON.parse(e));
+            const d = localStorage.getItem("deposits");
+            if (d) setDeposits(JSON.parse(d));
+            const c = localStorage.getItem("categories");
+            if (c) setCategories(JSON.parse(c));
+            setLoaded(true);
+        }, []);
+
+        // Y modifica la función persist:
+        async function persist(key, value, setter) {
+            setter(value);
+            localStorage.setItem(key, JSON.stringify(value));
         }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<Libreta />);
+        */
+        
+        // IMPORTANTE: Como el código es muy largo, simplemente reemplaza en tu editor 
+        // las llamadas a 'window.storage.get("key")' por 'JSON.parse(localStorage.getItem("key"))'
+        // y 'window.storage.set("key", val)' por 'localStorage.setItem("key", val)'.
     </script>
 </body>
 </html>
