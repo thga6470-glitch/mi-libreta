@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mi Libreta</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <style>body { margin: 0; font-family: sans-serif; }</style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { Plus, X, Utensils, Bus, Film, HeartPulse, ShoppingBag, Receipt, MoreHorizontal, Home, Gift, Book, Dumbbell, Plane, Coffee, PawPrint, Wrench, GraduationCap, Smartphone, Trash2, Pencil, ChevronLeft, ChevronRight, Settings, ArrowDownCircle, ArrowUpCircle, Check, Calculator, Delete } = lucide;
+        const { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, ResponsiveContainer } = Recharts;
+
+        // --- AQUÍ VA TU LÓGICA DE LA APP ---
+        // (He ajustado las funciones de persistencia para usar localStorage)
+        
+        function Libreta() {
+            // --- MODIFICACIÓN: Cambiamos las funciones de guardado para usar el almacenamiento del celular ---
+
+async function persist(key, value, setter) {
+  setter(value);
+  try {
+    // Esto guarda los datos directamente en la memoria de tu navegador/celular
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error("No se pudo guardar", e);
+  }
+}
+
+// Y en tu useEffect (donde cargamos los datos al iniciar), cámbialo así:
+useEffect(() => {
+  const loadData = () => {
+    try {
+      const exp = localStorage.getItem("expenses");
+      if (exp) setExpenses(JSON.parse(exp));
+      
+      const dep = localStorage.getItem("deposits");
+      if (dep) setDeposits(JSON.parse(dep));
+      
+      const cat = localStorage.getItem("categories");
+      if (cat) setCategories(JSON.parse(cat));
+    } catch (e) {
+      console.error("Error al cargar datos", e);
+    }
+    setLoaded(true);
+  };
+  loadData();
+}, []);
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<Libreta />);
+    </script>
+</body>
+</html>
